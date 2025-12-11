@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>[ scrm converter ]</title>
+<style>
+body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(180deg, #2d2d2d, #363a5c);
+    font-family: Arial, sans-serif;
+    color: white;
+}
+
+.container {
+    text-align: center;
+}
+
+h1 {
+    font-size: 24px;
+    margin-bottom: 25px;
+}
+
+/* New terminal-style buttons */
+button {
+    background: #1b1b1b;
+    color: #ffffff;
+    border: 1px solid rgba(93, 126, 216, 0.678);
+    padding: 9px 22px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-top: 18px;
+    border-radius: 10px;
+    letter-spacing: 0.5px;
+    transition: 
+        background 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.12s ease;
+}
+button:hover {
+    background: #242424;
+    box-shadow: 0 0 6px rgba(255,255,255,0.15);
+    transform: translateY(-1px);
+}
+button:active {
+    transform: scale(0.97);
+    background: #131313;
+}
+
+/* Resolution input */
+input[type=number] {
+    width: 80px;
+    padding: 6px;
+    border-radius: 5px;
+    border: none;
+    background: #1f1f1f;
+    color: white;
+    text-align: center;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+/* Remove arrows */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type=number] {
+    -moz-appearance: textfield;
+}
+
+#status {
+    margin-top: 20px;
+    font-size: 14px;
+    opacity: 0.8;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<h1>[ scrm converter ]</h1>
+
+<div>[ resolution ]</div>
+<input type="number" id="res" value="100" min="10" max="800">
+
+<br>
+
+<button onclick="openFile()">bild auswählen (png)</button>
+<input type="file" id="file" accept="image/png" style="display:none" onchange="convertImage()">
+
+<canvas id="canvas" style="display:none"></canvas>
+
+<div id="status"></div>
+
+</div>
+
+<script>
+function openFile() {
+    document.getElementById("file").click();
+}
+
+function convertImage() {
+    let file = document.getElementById("file").files[0];
+    if (!file) return;
+
+    let img = new Image();
+    img.onload = function() {
+        let resolution = parseInt(document.getElementById("res").value);
+        let canvas = document.getElementById("canvas");
+        let ctx = canvas.getContext("2d");
+
+        canvas.width = resolution;
+        canvas.height = resolution;
+
+        ctx.drawImage(img, 0, 0, resolution, resolution);
+
+        let data = ctx.getImageData(0, 0, resolution, resolution).data;
+
+        let result = "";
+        for (let i = 0; i < data.length; i += 4) {
+            let r = data[i];
+            let g = data[i+1];
+            let b = data[i+2];
+
+            let brightness = Math.round((r + g + b) / 3);
+            let val = Math.floor(brightness / 2.55);
+
+            if (val < 10) result += "0" + val;
+            else result += val;
+        }
+
+        let meta = resolution.toString();
+        let metaLen = meta.length.toString();
+        result += meta + metaLen;
+
+        navigator.clipboard.writeText(result).then(() => {
+            document.getElementById("status").innerText = "✓ kopiert (" + result.length + " chars)";
+        });
+    };
+
+    let reader = new FileReader();
+    reader.onload = e => img.src = e.target.result;
+    reader.readAsDataURL(file);
+}
+</script>
+
+</body>
+</html>
