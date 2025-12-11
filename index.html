@@ -24,7 +24,6 @@ h1 {
     margin-bottom: 25px;
 }
 
-/* New terminal-style buttons */
 button {
     background: #1b1b1b;
     color: #ffffff;
@@ -50,7 +49,6 @@ button:active {
     background: #131313;
 }
 
-/* Resolution input */
 input[type=number] {
     width: 80px;
     padding: 6px;
@@ -63,7 +61,6 @@ input[type=number] {
     font-size: 14px;
 }
 
-/* Remove arrows */
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button {
     -webkit-appearance: none;
@@ -83,11 +80,10 @@ input[type=number] {
 <body>
 
 <div class="container">
-
 <h1>[ scrm converter ]</h1>
 
 <div>[ resolution ]</div>
-<input type="number" id="res" value="100" min="10" max="800">
+<input type="number" id="res" value="300" min="1" max="300">
 
 <br>
 
@@ -97,10 +93,67 @@ input[type=number] {
 <canvas id="canvas" style="display:none"></canvas>
 
 <div id="status"></div>
-
 </div>
 
 <script>
+
+// ---- Parameter aus Python ----
+const BLUR_RADIUS = 0;
+const SAT_EXPONENT = 1.6;
+const SAT_SCALE = 0.60;
+const VAL_EXPONENT = 1.15;
+const VAL_SCALE = 0.95;
+const CONTRAST = 0.92;
+
+function clamp01(x) {
+    return x < 0 ? 0 : x > 1 ? 1 : x;
+}
+
+function rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    let max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, v = max;
+    let d = max - min;
+    s = max === 0 ? 0 : d / max;
+
+    if (d === 0) h = 0;
+    else if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+
+    h = Math.round(h * 60);
+    if (h < 0) h += 360;
+    return [h/360, s, v];  // Normalisiert h (0-1), s, v
+}
+
+function processImageData(data, resolution) {
+    let out = "";
+    // Python läuft von unten nach oben -> JS Array umkehren
+    for (let y = resolution - 1; y >= 0; y--) {
+        for (let x = 0; x < resolution; x++) {
+            let idx = (y * resolution + x) * 4;
+            let r = data[idx], g = data[idx+1], b = data[idx+2];
+
+            let [h, s, v] = rgbToHsv(r, g, b);
+            s = clamp01(Math.pow(s, SAT_EXPONENT) * SAT_SCALE);
+            v = clamp01(Math.pow(v, VAL_EXPONENT) * VAL_SCALE);
+            v = 0.5 + (v - 0.5) * CONTRAST;
+            v = clamp01(v);
+
+            let hs = Math.round(h * 99);
+            let ss = Math.round(s * 99);
+            let vs = Math.round(v * 99);
+
+            hs = Math.min(99, Math.max(0, hs));
+            ss = Math.min(99, Math.max(0, ss));
+            vs = Math.min(99, Math.max(0, vs));
+
+            out += `${hs.toString().padStart(2,'0')}${ss.toString().padStart(2,'0')}${vs.toString().padStart(2,'0')}`;
+        }
+    }
+    return out;
+}
+
 function openFile() {
     document.getElementById("file").click();
 }
@@ -120,27 +173,26 @@ function convertImage() {
 
         ctx.drawImage(img, 0, 0, resolution, resolution);
 
-        let data = ctx.getImageData(0, 0, resolution, resolution).data;
-
-        let result = "";
-        for (let i = 0; i < data.length; i += 4) {
-            let r = data[i];
-            let g = data[i+1];
-            let b = data[i+2];
-
-            let brightness = Math.round((r + g + b) / 3);
-            let val = Math.floor(brightness / 2.55);
-
-            if (val < 10) result += "0" + val;
-            else result += val;
+        if (BLUR_RADIUS > 0) {
+            // optional: einfacher Box Blur
+            ctx.globalAlpha = 0.5;
+            for (let y=-BLUR_RADIUS; y<=BLUR_RADIUS; y++){
+                for (let x=-BLUR_RADIUS; x<=BLUR_RADIUS; x++){
+                    ctx.drawImage(canvas, x, y, resolution, resolution);
+                }
+            }
+            ctx.globalAlpha = 1.0;
         }
 
+        let data = ctx.getImageData(0, 0, resolution, resolution).data;
+        let result = processImageData(data, resolution);
+
+        // Meta info anhängen (wie Python)
         let meta = resolution.toString();
-        let metaLen = meta.length.toString();
-        result += meta + metaLen;
+        result += meta + meta.length.toString();
 
         navigator.clipboard.writeText(result).then(() => {
-            document.getElementById("status").innerText = "✓ kopiert (" + result.length + " chars)";
+            document.getElementById("status").innerText = `✓ kopiert (${result.length} chars)`;
         });
     };
 
@@ -148,7 +200,7 @@ function convertImage() {
     reader.onload = e => img.src = e.target.result;
     reader.readAsDataURL(file);
 }
-</script>
 
+</script>
 </body>
 </html>
